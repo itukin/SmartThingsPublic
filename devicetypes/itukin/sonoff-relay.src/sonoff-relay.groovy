@@ -1,9 +1,9 @@
 metadata {
-	definition (name: "HS100-NodeRed", namespace: "itukin", author: "Ivan Tukin") {
+	definition (name: "Sonoff Relay", namespace: "itukin", author: "Ivan Tukin") {
 		capability "Polling"
-		capability "Power Meter"
+
 		capability "Switch"
-        capability "Energy Meter"
+
         capability "Refresh"
   	}
 
@@ -15,16 +15,13 @@ metadata {
                  icon: "st.switches.switch.on", backgroundColor: "#79b821"
        }
 
-       valueTile("energy", "device.energy", decoration: "flat") {
-			state "default", label:'${currentValue} kWh'
-		} 
-
+      
        standardTile("refresh", "device.refresh", height: 1, width: 1, inactiveLabel: false, decoration: "flat") {
 			state "default", label:"", action:"refresh.refresh", icon:"st.secondary.refresh"
 		}
 
        main("switch")
-       details(["switch","energy", "refresh"])
+       details(["switch", "refresh"])
 	}
 
    command "on"
@@ -32,7 +29,7 @@ metadata {
 }
 
 preferences {
- input("outletIP", "text", title: "Outlet IP", required: true, displayDuringSetup: true)
+ input("deviceId", "text", title: "Device", required: true, displayDuringSetup: true)
  input("gatewayIP", "text", title: "Gateway IP", required: true, displayDuringSetup: true)
  input("gatewayPort", "text", title: "Gateway Port", required: true, displayDuringSetup: true)
 }
@@ -63,26 +60,14 @@ def off() {
 
 def hubActionResponse(response){
 
-	
-
  def data = response.json ?: ""
  message("response: ${data}")
- def status = data?.relay_state;
+ def status = data?.result ?: "";
 
- if (status != 0 && status != 1){
- 	status = ""
- }
- def cons = data?.emeter?.get_realtime?.total ?: ""
-
- message("switch consumption: '${cons}'")
  message("switch status: '${status}'")
 
  if (status != "") {
-     sendEvent(name: "switch", value: status == 1 ? 'on' : 'off', isStateChange: true)
- }
-
- if (cons != "") {
- 	sendEvent(name: "energy", value: cons, isStateChange: true)
+     sendEvent(name: "switch", value: status == 'On' ? 'on' : 'off', isStateChange: true)
  }
 
 }
@@ -94,15 +79,18 @@ def poll(){
 
 private executeCommand(command){
 
+	
    def gatewayIPHex = convertIPtoHex(gatewayIP)
    def gatewayPortHex = convertPortToHex(gatewayPort)
-
    def headers = [:] 
-   headers.put("HOST", "$gatewayIP:$gatewayPort")    
+   headers.put("HOST", "$gatewayIPHex:$gatewayPortHex")    
 
-   def path =  "/outlet/$command?device=$outletIP"
+   message(headers)
+   def path =  "/relay/$command?device=$deviceId"
 
    try {
+   
+   def action = 
      sendHubCommand(new physicalgraph.device.HubAction([
          method: "GET",
          path: path,
@@ -115,10 +103,14 @@ private executeCommand(command){
    }
 }
 
+
+
 private String convertIPtoHex(ipAddress) {
    String hex = ipAddress.tokenize( '.' ).collect {  String.format( '%02x', it.toInteger() ) }.join()
    return hex
 }
+
+
 
 private String convertPortToHex(port) {
    String hexport = port.toString().format( '%04x', port.toInteger() )
